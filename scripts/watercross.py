@@ -66,11 +66,11 @@ def _angle_diff(a: float, b: float) -> float:
 
 
 def _node_arms(ways: dict[int, Waterway]):
-    """ノードID → (way ID の集合, 入る線の進行方位, 出る線の進行方位)。
+    """ノードID → (way ID の集合, 入る線の (進行方位, way ID), 出る線の進行方位)。
 
     OSM の水路は流下方向に描くので、way の終点は入る線、始点は出る線、途中の点は入1出1。
     """
-    arms: dict[int, tuple[set[int], list[float], list[float]]] = {}
+    arms: dict[int, tuple[set[int], list[tuple[float, int]], list[float]]] = {}
     for w in ways.values():
         ids, cs = w.node_ids, w.coords
         closed = len(ids) > 2 and ids[0] == ids[-1]
@@ -83,7 +83,7 @@ def _node_arms(ways: dict[int, Waterway]):
             prev = i - 1 if i > 0 else (last - 1 if closed else None)
             nxt = i + 1 if i < last else None
             if prev is not None:
-                ins.append(_bearing(cs[prev], cs[i]))
+                ins.append((_bearing(cs[prev], cs[i]), w.id))
             if nxt is not None:
                 outs.append(_bearing(cs[i], cs[nxt]))
     return {n: a for n, a in arms.items() if len(a[0]) >= 2}
@@ -106,11 +106,12 @@ def shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]:
     for nid, (wids, ins, outs) in _node_arms(ways).items():
         if len(ins) != 2 or len(outs) != 2:
             continue
-        w = ways[min(wids)]
-        lon, lat = w.coords[w.node_ids.index(nid)]
-        result.append(
-            Crossing("shared_node", min(wids), max(wids), lon, lat, nid, _is_straight(ins, outs))
-        )
+        # 入る線は2本とも別の流れなので、それを交差の2本とする。
+        # way ID の最小/最大だと、交点で分かれた同じ流れの上流と下流を組にしてしまう
+        a, b = sorted(wid for _, wid in ins)
+        lon, lat = ways[a].coords[ways[a].node_ids.index(nid)]
+        straight = _is_straight([bearing for bearing, _ in ins], outs)
+        result.append(Crossing("shared_node", a, b, lon, lat, nid, straight))
     return result
 
 

@@ -141,3 +141,10 @@ def test_markdown_has_links_and_pair_summary():
     assert "#map=19/35.72734/139.38766" in md
     assert "canal × river" in md
     assert "玉川上水" in md
+
+
+def test_shared_node_crossing_reports_two_flows_when_ways_split_at_node():
+    # 両方の水路が交点で way に分かれている。同じ流れの上下流(1 と 4)を組にしない
+    ws = ways(make(1, [W, C]), make(2, [N, C]), make(3, [C, S]), make(4, [C, E]))
+    [c] = shared_node_crossings(ws)
+    assert (c.way_a, c.way_b) == (1, 2)
