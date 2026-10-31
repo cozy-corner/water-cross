@@ -15,7 +15,6 @@
 - 対象: `waterway` ∈ {`river`, `stream`, `canal`, `drain`, `ditch`, `tidal_channel`} の way だけ
 - 入力: `~/y-junctions-data/osm/{hokkaido,tohoku,kanto,chubu,kansai,chugoku,shikoku,kyushu}-latest.osm.pbf`
 - 流下方向: way の始点=出る、終点=入る、途中の点=入1出1(OSM の waterway は流下方向に描く決まり)
-- 直進判定の許容: 180±35°(153号調査と同じ)
 - 関門: 関東で way 60964194(玉川上水, `tunnel=yes`, `layer=-1`)× way 1117757672(残堀川)の交差が `grade_tagged` で出る
 - 依存は uv(`pyproject.toml`)。中間 PBF は `data/` に置き、元データは置かない
 
@@ -63,7 +62,7 @@ def test_load_keeps_only_linear_waterways():
 **Interfaces:**
 - Consumes: `Waterway`
 - Produces:
-  - `@dataclass class Crossing: kind: str; way_a: int; way_b: int; lon: float; lat: float; node_id: int | None; straight: bool | None`
+  - `@dataclass class Crossing: kind: str; way_a: int; way_b: int; lon: float; lat: float; node_id: int | None`
   - `kind` ∈ {`shared_node`, `grade_tagged`, `grade_untagged`}
   - `node_flows(ways: dict[int, Waterway]) -> dict[int, tuple[int, int]]`(ノードID → (入る数, 出る数)。2本以上の way が通るノードだけ)
   - `shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]`(入2出2のみ。way_a/way_b は関わる way の最小/最大 ID)
@@ -79,18 +78,15 @@ def test_flows_split():      # A が 100 で終わり B, C が始まる
     assert node_flows(ws)[100] == (1, 2)
 def test_closed_way_endpoint_counts_as_pass_through():  # 閉じた way + 通過する way
     assert node_flows(ws)[100] == (2, 2)
-def test_shared_node_crossing_straight():
+def test_shared_node_crossing():
     [c] = shared_node_crossings(cross_ws)
-    assert c.kind == "shared_node" and c.straight is True
-def test_merge_then_split_not_straight():  # 西と南西から入り、東と南東へ出る
-    [c] = shared_node_crossings(ws)
-    assert c.straight is False
+    assert c.kind == "shared_node"
 def test_merge_is_not_crossing():
     assert shared_node_crossings(merge_ws) == []
 ```
 
 - [ ] **Step 2:** `uv run pytest` → 新規テストが FAIL
-- [ ] **Step 3:** 実装。閉じた way の始点=終点は1回の通過(入1出1)として数える。`straight` は、入る線の到着方位(最後の区間の向き)ごとに、出る線の出発方位との差が ±35° 以内(=反対側へ抜けている)の相手が重複なく見つかるかで決める
+- [ ] **Step 3:** 実装。閉じた way の始点=終点は1回の通過(入1出1)として数える
 - [ ] **Step 4:** `uv run pytest` → PASS
 
 ### Task 3: ノードを共有しない交差
@@ -152,7 +148,7 @@ def test_markdown_has_links_and_pair_summary():
 ```
 
 - [ ] **Step 2:** `uv run pytest` → FAIL
-- [ ] **Step 3:** 実装。行の列は spec の「表の列」の通り(#, 分類, 水路A/B の name・waterway・tunnel/bridge/layer, 座標, 地方, 直進, OSM リンク)。表の前に、分類別の件数、組み合わせ別の件数、overlap・endpoint_touch の件数を置く。並びは、分類(shared_node → grade_tagged → grade_untagged)、地方、緯度の順
+- [ ] **Step 3:** 実装。行の列は spec の「表の列」の通り(#, 分類, 水路A/B の name・waterway・tunnel/bridge/layer, 座標, 地方, OSM リンク)。表の前に、分類別の件数、組み合わせ別の件数、overlap・endpoint_touch の件数を置く。並びは、分類(shared_node → grade_tagged → grade_untagged)、地方、緯度の順
 - [ ] **Step 4:** `uv run pytest` → PASS
 
 ### Task 5: 実データで実行

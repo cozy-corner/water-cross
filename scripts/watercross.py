@@ -2,18 +2,15 @@
 
 import argparse
 import json
-import math
 from collections import Counter
 from pathlib import Path
 from dataclasses import dataclass
-from itertools import permutations
 
 import osmium
 import shapely
 from shapely import LineString
 
 WATERWAY_TYPES = frozenset({"river", "stream", "canal", "drain", "ditch", "tidal_channel"})
-STRAIGHT_TOLERANCE_DEG = 35  # 仮の値。根拠はない
 
 
 @dataclass(frozen=True)
@@ -32,7 +29,6 @@ class Crossing:
     lon: float
     lat: float
     node_id: int | None
-    straight: bool | None
 
 
 def load_waterways(path: str) -> dict[int, Waterway]:
@@ -54,25 +50,14 @@ def load_waterways(path: str) -> dict[int, Waterway]:
     return ways
 
 
-def _bearing(a: tuple[float, float], b: tuple[float, float]) -> float:
-    dx = (b[0] - a[0]) * math.cos(math.radians((a[1] + b[1]) / 2))
-    dy = b[1] - a[1]
-    return math.degrees(math.atan2(dx, dy)) % 360
-
-
-def _angle_diff(a: float, b: float) -> float:
-    d = abs(a - b) % 360
-    return min(d, 360 - d)
-
-
 def _node_arms(ways: dict[int, Waterway]):
-    """ノードID → (way ID の集合, 入る線の (進行方位, way ID), 出る線の進行方位)。
+    """ノードID → (way ID の集合, 入る線の way ID, 出る線の way ID)。
 
     OSM の水路は流下方向に描くので、way の終点は入る線、始点は出る線、途中の点は入1出1。
     """
-    arms: dict[int, tuple[set[int], list[tuple[float, int]], list[float]]] = {}
+    arms: dict[int, tuple[set[int], list[int], list[int]]] = {}
     for w in ways.values():
-        ids, cs = w.node_ids, w.coords
+        ids = w.node_ids
         closed = len(ids) > 2 and ids[0] == ids[-1]
         last = len(ids) - 1
         for i, nid in enumerate(ids):
@@ -80,25 +65,15 @@ def _node_arms(ways: dict[int, Waterway]):
                 continue  # 始点と同じ点。始点側で通過1回として数える
             ws_, ins, outs = arms.setdefault(nid, (set(), [], []))
             ws_.add(w.id)
-            prev = i - 1 if i > 0 else (last - 1 if closed else None)
-            nxt = i + 1 if i < last else None
-            if prev is not None:
-                ins.append((_bearing(cs[prev], cs[i]), w.id))
-            if nxt is not None:
-                outs.append(_bearing(cs[i], cs[nxt]))
+            if i > 0 or closed:
+                ins.append(w.id)
+            if i < last:
+                outs.append(w.id)
     return {n: a for n, a in arms.items() if len(a[0]) >= 2}
 
 
 def node_flows(ways: dict[int, Waterway]) -> dict[int, tuple[int, int]]:
     return {n: (len(ins), len(outs)) for n, (_, ins, outs) in _node_arms(ways).items()}
-
-
-def _is_straight(ins: list[float], outs: list[float]) -> bool:
-    # 入ってきた線それぞれが、進行方向を保ったまま別々の出る線へ抜けているか
-    return any(
-        all(_angle_diff(i, o) <= STRAIGHT_TOLERANCE_DEG for i, o in zip(ins, perm))
-        for perm in permutations(outs)
-    )
 
 
 def shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]:
@@ -108,10 +83,9 @@ def shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]:
             continue
         # 入る線は2本とも別の流れなので、それを交差の2本とする。
         # way ID の最小/最大だと、交点で分かれた同じ流れの上流と下流を組にしてしまう
-        a, b = sorted(wid for _, wid in ins)
+        a, b = sorted(ins)
         lon, lat = ways[a].coords[ways[a].node_ids.index(nid)]
-        straight = _is_straight([bearing for bearing, _ in ins], outs)
-        result.append(Crossing("shared_node", a, b, lon, lat, nid, straight))
+        result.append(Crossing("shared_node", a, b, lon, lat, nid))
     return result
 
 
@@ -163,7 +137,7 @@ def geometric_crossings(ways: dict[int, Waterway]) -> tuple[list[Crossing], dict
                 continue
             kind = "grade_tagged" if _is_grade_separated(a, b) else "grade_untagged"
             lo, hi = sorted((a.id, b.id))
-            result.append(Crossing(kind, lo, hi, p.x, p.y, None, None))
+            result.append(Crossing(kind, lo, hi, p.x, p.y, None))
     return result, stats
 
 
@@ -200,7 +174,6 @@ def to_row(c: Crossing, ways: dict[int, Waterway], region: str) -> dict:
         "lat": c.lat,
         "lon": c.lon,
         "node_id": c.node_id,
-        "straight": c.straight,
         "a": _way_info(ways[c.way_a]),
         "b": _way_info(ways[c.way_b]),
     }
@@ -237,18 +210,17 @@ def render_markdown(rows: list[dict], stats: dict) -> str:
         "",
         "## 一覧",
         "",
-        "| # | 分類 | 水路A | 水路B | 座標 | 地方 | 直進 | OSM |",
-        "|---|---|---|---|---|---|---|---|",
+        "| # | 分類 | 水路A | 水路B | 座標 | 地方 | OSM |",
+        "|---|---|---|---|---|---|---|",
     ]
     for i, r in enumerate(rows, 1):
         lat, lon = f"{r['lat']:.5f}", f"{r['lon']:.5f}"
-        straight = {True: "○", False: "×", None: "—"}[r["straight"]]
         links = f"[map](https://www.openstreetmap.org/#map=19/{lat}/{lon})"
         if r["node_id"] is not None:
             links = f"[node](https://www.openstreetmap.org/node/{r['node_id']}) " + links
         out.append(
             f"| {i} | {KIND_LABEL[r['kind']]} | {_way_cell(r['a'])} | {_way_cell(r['b'])} "
-            f"| {lat}, {lon} | {r['region']} | {straight} | {links} |"
+            f"| {lat}, {lon} | {r['region']} | {links} |"
         )
     return "\n".join(out) + "\n"
 

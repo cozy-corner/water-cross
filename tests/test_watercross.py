@@ -41,7 +41,6 @@ def ways(*ws):
 
 
 W, E, N, S = (1, -0.001, 0), (2, 0.001, 0), (3, 0, 0.001), (4, 0, -0.001)
-SW, SE = (5, -0.001, -0.001), (6, 0.001, -0.001)
 C = (100, 0, 0)
 
 CROSS = ways(make(1, [W, C, E]), make(2, [N, C, S]))
@@ -66,16 +65,10 @@ def test_closed_way_endpoint_counts_as_pass_through():
     assert node_flows(ws)[100] == (2, 2)
 
 
-def test_shared_node_crossing_straight():
+def test_shared_node_crossing():
     [c] = shared_node_crossings(CROSS)
-    assert c.kind == "shared_node" and c.straight is True
+    assert c.kind == "shared_node"
     assert (c.way_a, c.way_b, c.node_id) == (1, 2, 100)
-
-
-def test_merge_then_split_not_straight():
-    ws = ways(make(1, [W, C]), make(2, [SW, C]), make(3, [C, E]), make(4, [C, SE]))
-    [c] = shared_node_crossings(ws)
-    assert c.straight is False
 
 
 def test_merge_is_not_crossing():
@@ -121,12 +114,12 @@ def test_two_crossings_same_pair():
 
 
 def test_dedupe_same_crossing_from_two_regions():
-    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None, None)
+    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None)
     assert len(dedupe([c, replace(c)])) == 1
 
 
 def test_dedupe_keeps_distinct_points_of_same_pair():
-    c = Crossing("grade_untagged", 1, 2, 139.0, 35.0, None, None)
+    c = Crossing("grade_untagged", 1, 2, 139.0, 35.0, None)
     assert len(dedupe([c, replace(c, lon=139.001)])) == 2
 
 
@@ -135,7 +128,7 @@ def test_markdown_has_links_and_pair_summary():
              {"waterway": "canal", "name": "玉川上水", "tunnel": "yes", "layer": "-1"})
     b = make(1117757672, [(3, 139.3877, 35.7275), (4, 139.3877, 35.7272)],
              {"waterway": "river", "name": "残堀川"})
-    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None, None)
+    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None)
     md = render_markdown([to_row(c, ways(a, b), "kanto")], {"overlap": 0, "endpoint_touch": 0})
     assert "https://www.openstreetmap.org/way/60964194" in md
     assert "#map=19/35.72734/139.38766" in md
