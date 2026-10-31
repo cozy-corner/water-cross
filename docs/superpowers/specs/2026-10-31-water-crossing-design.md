@@ -20,7 +20,7 @@
 ## 対象データ
 
 - `~/y-junctions-data/osm/` の Geofabrik 8地方: hokkaido, tohoku, kanto, chubu, kansai, chugoku, shikoku, kyushu
-- 線の水路すべて: `waterway=river|stream|canal|drain|ditch`(用水路どうしも数える)
+- 線の水路: `waterway=river|stream|canal|drain`。`ditch`(道路脇の側溝など)は、道路と水路の交差が水路どうしとして出るので対象外(2026-10-31 変更)
   - (私の判断)`tidal_channel` も含める。`riverbank`・`dam`・`weir` など線の水路でないものは外す
 
 ## 交差の定義と分類

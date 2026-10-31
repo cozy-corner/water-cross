@@ -10,7 +10,8 @@ import osmium
 import shapely
 from shapely import LineString
 
-WATERWAY_TYPES = frozenset({"river", "stream", "canal", "drain", "ditch", "tidal_channel"})
+# ditch は道路脇の側溝や田の縁の溝。道路と水路の交差が水路どうしの交差として出るので対象外
+WATERWAY_TYPES = frozenset({"river", "stream", "canal", "drain", "tidal_channel"})
 
 
 @dataclass(frozen=True)

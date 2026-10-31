@@ -7,3 +7,6 @@ w1 v1 Twaterway=river Nn10,n11,n12
 w2 v1 Twaterway=riverbank Nn10,n11,n21,n10
 w3 v1 Thighway=residential Nn20,n21
 w4 v1 Twaterway=stream Nn20,n99
+n30 v1 x139.0 y35.002
+n31 v1 x139.001 y35.002
+w5 v1 Twaterway=ditch Nn30,n31
