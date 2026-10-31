@@ -19,6 +19,7 @@
 ## 結果(全国 8地方)
 
 全 **9,351** 件。一覧は [CROSSINGS.md](CROSSINGS.md)、元データは `data/crossings.json`。
+地図で見るには `uv run scripts/make_map.py data/crossings.json map.html` で `map.html` を作り、ブラウザで開く(分類ごとに色分け、表示の切り替えあり。背景は地理院タイル)。
 
 | 分類 | 件数 |
 |---|---|

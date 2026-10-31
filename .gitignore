@@ -2,3 +2,4 @@
 __pycache__/
 .superpowers/
 data/*.pbf
+map.html
