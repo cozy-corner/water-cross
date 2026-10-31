@@ -3,7 +3,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-from watercross import Waterway, load_waterways, node_flows, shared_node_crossings
+from watercross import (
+    Waterway,
+    geometric_crossings,
+    load_waterways,
+    node_flows,
+    shared_node_crossings,
+)
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "basic.opl")
 
@@ -70,3 +76,40 @@ def test_merge_then_split_not_straight():
 def test_merge_is_not_crossing():
     ws = ways(make(1, [W, C]), make(2, [N, C]), make(3, [C, E]))
     assert shared_node_crossings(ws) == []
+
+
+def test_tunnel_crossing_is_grade_tagged():
+    ws = ways(make(1, [W, E]), make(2, [N, S], {"waterway": "canal", "tunnel": "culvert"}))
+    cs, _ = geometric_crossings(ws)
+    assert [c.kind for c in cs] == ["grade_tagged"] and cs[0].node_id is None
+    assert (cs[0].lon, cs[0].lat) == (0, 0)
+
+
+def test_layer_difference_is_grade_tagged():
+    ws = ways(make(1, [W, E]), make(2, [N, S], {"waterway": "canal", "layer": "-1"}))
+    cs, _ = geometric_crossings(ws)
+    assert [c.kind for c in cs] == ["grade_tagged"]
+
+
+def test_untagged_crossing():
+    cs, _ = geometric_crossings(ways(make(1, [W, E]), make(2, [N, S])))
+    assert [c.kind for c in cs] == ["grade_untagged"]
+
+
+def test_shared_node_not_reported_here():
+    assert geometric_crossings(CROSS)[0] == []
+
+
+def test_endpoint_on_line_is_touch_not_crossing():
+    cs, stats = geometric_crossings(ways(make(1, [W, E]), make(2, [N, (101, 0, 0)])))
+    assert cs == [] and stats["endpoint_touch"] == 1
+
+
+def test_overlap_counted_not_reported():
+    cs, stats = geometric_crossings(ways(make(1, [W, E]), make(2, [(11, -0.001, 0), (12, 0.001, 0)])))
+    assert cs == [] and stats["overlap"] == 1
+
+
+def test_two_crossings_same_pair():
+    b = make(2, [(11, -0.0005, 0.001), (12, -0.0005, -0.001), (13, 0.0005, -0.001), (14, 0.0005, 0.001)])
+    assert len(geometric_crossings(ways(make(1, [W, E]), b))[0]) == 2

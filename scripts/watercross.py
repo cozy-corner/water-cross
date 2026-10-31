@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from itertools import permutations
 
 import osmium
+import shapely
+from shapely import LineString
 
 WATERWAY_TYPES = frozenset({"river", "stream", "canal", "drain", "ditch", "tidal_channel"})
 STRAIGHT_TOLERANCE_DEG = 35  # 153号調査の貫通軸と同じ許容
@@ -106,3 +108,55 @@ def shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]:
             Crossing("shared_node", min(wids), max(wids), lon, lat, nid, _is_straight(ins, outs))
         )
     return result
+
+
+def _key(c: tuple[float, float]) -> tuple[float, float]:
+    return (round(c[0], 9), round(c[1], 9))
+
+
+def _ends(w: Waterway) -> set[tuple[float, float]]:
+    if w.node_ids[0] == w.node_ids[-1]:
+        return set()
+    return {_key(w.coords[0]), _key(w.coords[-1])}
+
+
+def _active(v: str | None) -> bool:
+    return v is not None and v != "no"
+
+
+def _is_grade_separated(a: Waterway, b: Waterway) -> bool:
+    if any(_active(w.tags.get(k)) for w in (a, b) for k in ("tunnel", "bridge")):
+        return True
+    return a.tags.get("layer", "0").strip() != b.tags.get("layer", "0").strip()
+
+
+def geometric_crossings(ways: dict[int, Waterway]) -> tuple[list[Crossing], dict[str, int]]:
+    """ノードを共有せずに線が交わる点。共有ノードでの交差は shared_node_crossings の担当。"""
+    wl = list(ways.values())
+    lines = [LineString(w.coords) for w in wl]
+    tree = shapely.STRtree(lines)
+    left, right = tree.query(lines, predicate="intersects")
+    stats = {"overlap": 0, "endpoint_touch": 0}
+    result = []
+    for i, j in zip(left, right):
+        if i >= j:
+            continue
+        a, b = wl[i], wl[j]
+        parts = shapely.get_parts(lines[i].intersection(lines[j]))
+        if any(p.geom_type != "Point" for p in parts):
+            stats["overlap"] += 1
+            continue
+        a_nodes = dict(zip(a.node_ids, a.coords))
+        shared = {_key(a_nodes[n]) for n in set(a.node_ids) & set(b.node_ids)}
+        ends = _ends(a) | _ends(b)
+        for p in parts:
+            k = _key((p.x, p.y))
+            if k in shared:
+                continue
+            if k in ends:
+                stats["endpoint_touch"] += 1
+                continue
+            kind = "grade_tagged" if _is_grade_separated(a, b) else "grade_untagged"
+            lo, hi = sorted((a.id, b.id))
+            result.append(Crossing(kind, lo, hi, p.x, p.y, None, None))
+    return result, stats
