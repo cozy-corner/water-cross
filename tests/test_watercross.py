@@ -1,13 +1,18 @@
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from watercross import (
+    Crossing,
     Waterway,
+    dedupe,
     geometric_crossings,
     load_waterways,
     node_flows,
+    render_markdown,
+    to_row,
     shared_node_crossings,
 )
 
@@ -113,3 +118,26 @@ def test_overlap_counted_not_reported():
 def test_two_crossings_same_pair():
     b = make(2, [(11, -0.0005, 0.001), (12, -0.0005, -0.001), (13, 0.0005, -0.001), (14, 0.0005, 0.001)])
     assert len(geometric_crossings(ways(make(1, [W, E]), b))[0]) == 2
+
+
+def test_dedupe_same_crossing_from_two_regions():
+    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None, None)
+    assert len(dedupe([c, replace(c)])) == 1
+
+
+def test_dedupe_keeps_distinct_points_of_same_pair():
+    c = Crossing("grade_untagged", 1, 2, 139.0, 35.0, None, None)
+    assert len(dedupe([c, replace(c, lon=139.001)])) == 2
+
+
+def test_markdown_has_links_and_pair_summary():
+    a = make(60964194, [(1, 139.3876, 35.7273), (2, 139.3878, 35.7274)],
+             {"waterway": "canal", "name": "玉川上水", "tunnel": "yes", "layer": "-1"})
+    b = make(1117757672, [(3, 139.3877, 35.7275), (4, 139.3877, 35.7272)],
+             {"waterway": "river", "name": "残堀川"})
+    c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None, None)
+    md = render_markdown([to_row(c, ways(a, b), "kanto")], {"overlap": 0, "endpoint_touch": 0})
+    assert "https://www.openstreetmap.org/way/60964194" in md
+    assert "#map=19/35.72734/139.38766" in md
+    assert "canal × river" in md
+    assert "玉川上水" in md

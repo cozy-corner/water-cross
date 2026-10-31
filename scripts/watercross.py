@@ -1,6 +1,10 @@
 """OSM の水路どうしの交差点を検出する。"""
 
+import argparse
+import json
 import math
+from collections import Counter
+from pathlib import Path
 from dataclasses import dataclass
 from itertools import permutations
 
@@ -160,3 +164,124 @@ def geometric_crossings(ways: dict[int, Waterway]) -> tuple[list[Crossing], dict
             lo, hi = sorted((a.id, b.id))
             result.append(Crossing(kind, lo, hi, p.x, p.y, None, None))
     return result, stats
+
+
+KIND_ORDER = ("shared_node", "grade_tagged", "grade_untagged")
+KIND_LABEL = {
+    "shared_node": "共有ノード",
+    "grade_tagged": "立体(記入あり)",
+    "grade_untagged": "立体(記入なし)",
+}
+
+
+def _crossing_key(c: Crossing):
+    if c.node_id is not None:
+        return ("n", c.node_id)
+    return ("p", c.way_a, c.way_b, round(c.lon, 6), round(c.lat, 6))
+
+
+def dedupe(crossings: list[Crossing]) -> list[Crossing]:
+    """地方の切り出しが重なる境界で、同じ交差が2回出るのを1件にする。"""
+    seen = {}
+    for c in crossings:
+        seen.setdefault(_crossing_key(c), c)
+    return list(seen.values())
+
+
+def _way_info(w: Waterway) -> dict:
+    return {"id": w.id, **{k: w.tags.get(k) for k in ("name", "waterway", "tunnel", "bridge", "layer")}}
+
+
+def to_row(c: Crossing, ways: dict[int, Waterway], region: str) -> dict:
+    return {
+        "kind": c.kind,
+        "region": region,
+        "lat": c.lat,
+        "lon": c.lon,
+        "node_id": c.node_id,
+        "straight": c.straight,
+        "a": _way_info(ways[c.way_a]),
+        "b": _way_info(ways[c.way_b]),
+    }
+
+
+def _cell(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
+def _way_cell(w: dict) -> str:
+    extra = [f"{k}={w[k]}" for k in ("tunnel", "bridge", "layer") if w[k] is not None]
+    label = _cell(w["name"] or "(無名)")
+    attrs = ", ".join([w["waterway"], *extra])
+    return f"[{label}](https://www.openstreetmap.org/way/{w['id']}) ({_cell(attrs)})"
+
+
+def _pair(r: dict) -> str:
+    return " × ".join(sorted((r["a"]["waterway"], r["b"]["waterway"])))
+
+
+def render_markdown(rows: list[dict], stats: dict) -> str:
+    rows = sorted(rows, key=lambda r: (KIND_ORDER.index(r["kind"]), r["region"], r["lat"]))
+    out = ["# 水路の交差点", "", "## 分類別", "", "| 分類 | 件数 |", "|---|---|"]
+    kinds = Counter(r["kind"] for r in rows)
+    out += [f"| {KIND_LABEL[k]} | {kinds[k]} |" for k in KIND_ORDER]
+    out += ["", "## 水路の種類の組み合わせ別", "", "| 組み合わせ | 件数 |", "|---|---|"]
+    out += [f"| {p} | {n} |" for p, n in Counter(_pair(r) for r in rows).most_common()]
+    out += [
+        "",
+        "## 交差に数えなかったもの",
+        "",
+        f"- 線どうしが重なっている組: {stats['overlap']}",
+        f"- 端点が他の線に乗っているがノード未接続: {stats['endpoint_touch']}",
+        "",
+        "## 一覧",
+        "",
+        "| # | 分類 | 水路A | 水路B | 座標 | 地方 | 直進 | OSM |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for i, r in enumerate(rows, 1):
+        lat, lon = f"{r['lat']:.5f}", f"{r['lon']:.5f}"
+        straight = {True: "○", False: "×", None: "—"}[r["straight"]]
+        links = f"[map](https://www.openstreetmap.org/#map=19/{lat}/{lon})"
+        if r["node_id"] is not None:
+            links = f"[node](https://www.openstreetmap.org/node/{r['node_id']}) " + links
+        out.append(
+            f"| {i} | {KIND_LABEL[r['kind']]} | {_way_cell(r['a'])} | {_way_cell(r['b'])} "
+            f"| {lat}, {lon} | {r['region']} | {straight} | {links} |"
+        )
+    return "\n".join(out) + "\n"
+
+
+def report(paths: list[str], json_out: str, md_out: str) -> None:
+    rows, seen = [], set()
+    stats = {"overlap": 0, "endpoint_touch": 0}
+    for path in paths:
+        region = Path(path).name.split("_")[0].split("-")[0]
+        ways = load_waterways(path)
+        geo, st = geometric_crossings(ways)
+        for k in stats:
+            stats[k] += st[k]
+        for c in shared_node_crossings(ways) + geo:
+            key = _crossing_key(c)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(to_row(c, ways, region))
+        print(f"{region}: {len(ways)} ways, 累計 {len(rows)} 件")
+    Path(json_out).write_text(json.dumps({"stats": stats, "crossings": rows}, ensure_ascii=False, indent=1))
+    Path(md_out).write_text(render_markdown(rows, stats))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("report")
+    r.add_argument("pbf", nargs="+")
+    r.add_argument("--json", required=True)
+    r.add_argument("--md", required=True)
+    args = ap.parse_args()
+    report(args.pbf, args.json, args.md)
+
+
+if __name__ == "__main__":
+    main()
