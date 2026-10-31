@@ -35,7 +35,7 @@ const ROWS = __ROWS__;
 
 const map = L.map("map", { preferCanvas: true }).setView([36.2, 138.2], 6);
 // OSM の公式タイルは file:// からの読み込みを拒否するので、地理院タイルを使う
-L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
   maxZoom: 18,
   attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">地理院タイル</a> | 交差点データ &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
@@ -61,8 +61,11 @@ for (const r of ROWS) {
     <tr><td>水路B</td><td>${wayLine(r.b)}</td></tr>
     <tr><td>座標</td><td>${lat}, ${lon}</td></tr>
     <tr><td>OSM</td><td>${node}<a href="https://www.openstreetmap.org/#map=19/${lat}/${lon}" target="_blank">map</a></td></tr>
+    <tr><td>Google</td><td><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}" target="_blank">ストリートビュー</a></td></tr>
   </table>`;
-  L.circleMarker([r.lat, r.lon], { radius: 4, color: g.color, weight: 1, fillOpacity: 0.7 }).bindPopup(html).addTo(g.layer);
+  // 淡色地図の上で白く縁取り、背景に埋もれないようにする
+  L.circleMarker([r.lat, r.lon], { radius: 8, color: "#fff", weight: 2, fillColor: g.color, fillOpacity: 0.95 })
+    .bindPopup(html).addTo(g.layer);
 }
 
 const legend = L.control({ position: "topright" });

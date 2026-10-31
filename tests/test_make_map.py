@@ -22,3 +22,7 @@ def test_map_embeds_rows_and_legend():
 def test_map_escapes_script_close_in_names():
     row = {**ROW, "a": {**ROW["a"], "name": "</script><b>"}}
     assert "</script><b>" not in render_map([row])
+
+
+def test_map_has_street_view_link():
+    assert "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=" in render_map([ROW])
