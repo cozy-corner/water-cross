@@ -13,7 +13,7 @@ import shapely
 from shapely import LineString
 
 WATERWAY_TYPES = frozenset({"river", "stream", "canal", "drain", "ditch", "tidal_channel"})
-STRAIGHT_TOLERANCE_DEG = 35  # 153号調査の貫通軸と同じ許容
+STRAIGHT_TOLERANCE_DEG = 35  # 仮の値。根拠はない
 
 
 @dataclass(frozen=True)
