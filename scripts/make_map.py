@@ -55,7 +55,16 @@ for (const r of ROWS) {
   g.n++;
   const lat = r.lat.toFixed(5), lon = r.lon.toFixed(5);
   const node = r.node_id == null ? "" : `<a href="https://www.openstreetmap.org/node/${r.node_id}" target="_blank">node</a> `;
-  const html = `<table class="popup">
+  const wayText = (w) => `${w.name || "(無名)"} (${[w.waterway, ...["tunnel", "bridge", "layer"].filter((k) => w[k] != null).map((k) => `${k}=${w[k]}`)].join(", ")}) https://www.openstreetmap.org/way/${w.id}`;
+  const text = [
+    `分類: ${g.label}`,
+    `水路A: ${wayText(r.a)}`,
+    `水路B: ${wayText(r.b)}`,
+    `座標: ${lat}, ${lon}`,
+    ...(r.node_id == null ? [] : [`node: https://www.openstreetmap.org/node/${r.node_id}`]),
+  ].join("\\n");
+  const html = `<button onclick="navigator.clipboard.writeText(this.dataset.text)" data-text="${esc(text)}">コピー</button>
+  <table class="popup">
     <tr><td>分類</td><td>${g.label}</td></tr>
     <tr><td>水路A</td><td>${wayLine(r.a)}</td></tr>
     <tr><td>水路B</td><td>${wayLine(r.b)}</td></tr>
