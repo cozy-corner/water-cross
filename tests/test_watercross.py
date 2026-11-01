@@ -89,9 +89,10 @@ def test_layer_difference_is_grade_tagged():
     assert [c.kind for c in cs] == ["grade_tagged"]
 
 
-def test_untagged_crossing():
-    cs, _ = geometric_crossings(ways(make(1, [W, E]), make(2, [N, S])))
-    assert [c.kind for c in cs] == ["grade_untagged"]
+def test_untagged_crossing_is_counted_not_reported():
+    # 同じ layer でノードを共有しない交点は、データの上では交差として描かれていない
+    cs, stats = geometric_crossings(ways(make(1, [W, E]), make(2, [N, S])))
+    assert cs == [] and stats["untagged"] == 1
 
 
 def test_shared_node_not_reported_here():
@@ -109,7 +110,8 @@ def test_overlap_counted_not_reported():
 
 
 def test_two_crossings_same_pair():
-    b = make(2, [(11, -0.0005, 0.001), (12, -0.0005, -0.001), (13, 0.0005, -0.001), (14, 0.0005, 0.001)])
+    b = make(2, [(11, -0.0005, 0.001), (12, -0.0005, -0.001), (13, 0.0005, -0.001), (14, 0.0005, 0.001)],
+             {"waterway": "canal", "tunnel": "culvert"})
     assert len(geometric_crossings(ways(make(1, [W, E]), b))[0]) == 2
 
 
@@ -119,7 +121,7 @@ def test_dedupe_same_crossing_from_two_regions():
 
 
 def test_dedupe_keeps_distinct_points_of_same_pair():
-    c = Crossing("grade_untagged", 1, 2, 139.0, 35.0, None)
+    c = Crossing("grade_tagged", 1, 2, 139.0, 35.0, None)
     assert len(dedupe([c, replace(c, lon=139.001)])) == 2
 
 
@@ -129,7 +131,7 @@ def test_markdown_has_links_and_pair_summary():
     b = make(1117757672, [(3, 139.3877, 35.7275), (4, 139.3877, 35.7272)],
              {"waterway": "river", "name": "残堀川"})
     c = Crossing("grade_tagged", 60964194, 1117757672, 139.38766, 35.72734, None)
-    md = render_markdown([to_row(c, ways(a, b), "kanto")], {"overlap": 0, "endpoint_touch": 0})
+    md = render_markdown([to_row(c, ways(a, b), "kanto")], {"overlap": 0, "endpoint_touch": 0, "untagged": 0})
     assert "https://www.openstreetmap.org/way/60964194" in md
     assert "#map=19/35.72734/139.38766" in md
     assert "canal × river" in md

@@ -15,7 +15,7 @@ ROW = {
 def test_map_embeds_rows_and_legend():
     html = render_map([ROW])
     assert "玉川上水" in html and "60964194" in html
-    for label in ("共有ノード", "立体(記入あり)", "立体(記入なし)"):
+    for label in ("共有ノード", "立体(記入あり)"):
         assert label in html
 
 

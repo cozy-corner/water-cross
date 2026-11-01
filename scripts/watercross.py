@@ -24,7 +24,7 @@ class Waterway:
 
 @dataclass
 class Crossing:
-    kind: str  # shared_node / grade_tagged / grade_untagged
+    kind: str  # shared_node / grade_tagged
     way_a: int
     way_b: int
     lon: float
@@ -121,7 +121,7 @@ def geometric_crossings(ways: dict[int, Waterway]) -> tuple[list[Crossing], dict
     lines = [LineString(w.coords) for w in wl]
     tree = shapely.STRtree(lines)
     left, right = tree.query(lines, predicate="intersects")
-    stats = {"overlap": 0, "endpoint_touch": 0}
+    stats = {"overlap": 0, "endpoint_touch": 0, "untagged": 0}
     result = []
     for i, j in zip(left, right):
         if i >= j:
@@ -141,17 +141,19 @@ def geometric_crossings(ways: dict[int, Waterway]) -> tuple[list[Crossing], dict
             if k in ends:
                 stats["endpoint_touch"] += 1
                 continue
-            kind = "grade_tagged" if _is_grade_separated(a, b) else "grade_untagged"
+            # 同じ layer でノードを共有しない交点は、JOSM が描き方の誤りとして警告する形で、交差として描かれていない
+            if not _is_grade_separated(a, b):
+                stats["untagged"] += 1
+                continue
             lo, hi = sorted((a.id, b.id))
-            result.append(Crossing(kind, lo, hi, p.x, p.y, None))
+            result.append(Crossing("grade_tagged", lo, hi, p.x, p.y, None))
     return result, stats
 
 
-KIND_ORDER = ("shared_node", "grade_tagged", "grade_untagged")
+KIND_ORDER = ("shared_node", "grade_tagged")
 KIND_LABEL = {
     "shared_node": "共有ノード",
     "grade_tagged": "立体(記入あり)",
-    "grade_untagged": "立体(記入なし)",
 }
 
 
@@ -213,6 +215,7 @@ def render_markdown(rows: list[dict], stats: dict) -> str:
         "",
         f"- 線どうしが重なっている組: {stats['overlap']}",
         f"- 端点が他の線に乗っているがノード未接続: {stats['endpoint_touch']}",
+        f"- ノードを共有せず、上下を示すタグもない交点: {stats['untagged']}",
         "",
         "## 一覧",
         "",
@@ -233,7 +236,7 @@ def render_markdown(rows: list[dict], stats: dict) -> str:
 
 def report(paths: list[str], json_out: str, md_out: str) -> None:
     rows, seen = [], set()
-    stats = {"overlap": 0, "endpoint_touch": 0}
+    stats = {"overlap": 0, "endpoint_touch": 0, "untagged": 0}
     for path in paths:
         region = Path(path).name.split("_")[0].split("-")[0]
         ways = load_waterways(path)

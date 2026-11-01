@@ -7,7 +7,6 @@ from pathlib import Path
 KINDS = [
     ("shared_node", "共有ノード", "#d9480f"),
     ("grade_tagged", "立体(記入あり)", "#1971c2"),
-    ("grade_untagged", "立体(記入なし)", "#9c36b5"),
 ]
 
 TEMPLATE = """<!doctype html>
