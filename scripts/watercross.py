@@ -52,11 +52,11 @@ def load_waterways(path: str) -> dict[int, Waterway]:
 
 
 def _node_arms(ways: dict[int, Waterway]):
-    """ノードID → (way ID の集合, 入る線の way ID, 出る線の way ID)。
+    """ノードID → (way ID の集合, 入る線の way ID, 出る線の way ID, 各線の隣のノードID)。
 
     OSM の水路は流下方向に描くので、way の終点は入る線、始点は出る線、途中の点は入1出1。
     """
-    arms: dict[int, tuple[set[int], list[int], list[int]]] = {}
+    arms: dict[int, tuple[set[int], list[int], list[int], list[int]]] = {}
     for w in ways.values():
         ids = w.node_ids
         closed = len(ids) > 2 and ids[0] == ids[-1]
@@ -64,23 +64,28 @@ def _node_arms(ways: dict[int, Waterway]):
         for i, nid in enumerate(ids):
             if closed and i == last:
                 continue  # 始点と同じ点。始点側で通過1回として数える
-            ws_, ins, outs = arms.setdefault(nid, (set(), [], []))
+            ws_, ins, outs, nbrs = arms.setdefault(nid, (set(), [], [], []))
             ws_.add(w.id)
             if i > 0 or closed:
                 ins.append(w.id)
+                nbrs.append(ids[i - 1] if i > 0 else ids[-2])
             if i < last:
                 outs.append(w.id)
+                nbrs.append(ids[i + 1])
     return {n: a for n, a in arms.items() if len(a[0]) >= 2}
 
 
 def node_flows(ways: dict[int, Waterway]) -> dict[int, tuple[int, int]]:
-    return {n: (len(ins), len(outs)) for n, (_, ins, outs) in _node_arms(ways).items()}
+    return {n: (len(ins), len(outs)) for n, (_, ins, outs, _) in _node_arms(ways).items()}
 
 
 def shared_node_crossings(ways: dict[int, Waterway]) -> list[Crossing]:
     result = []
-    for nid, (wids, ins, outs) in _node_arms(ways).items():
+    for nid, (wids, ins, outs, nbrs) in _node_arms(ways).items():
         if len(ins) != 2 or len(outs) != 2:
+            continue
+        # 2本が同じ隣のノードへ向かう線を持つなら、その区間は重ねて描かれた同じ線で、4方向に分かれていない
+        if len(set(nbrs)) < 4:
             continue
         # 入る線は2本とも別の流れなので、それを交差の2本とする。
         # way ID の最小/最大だと、交点で分かれた同じ流れの上流と下流を組にしてしまう

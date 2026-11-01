@@ -141,3 +141,15 @@ def test_shared_node_crossing_reports_two_flows_when_ways_split_at_node():
     ws = ways(make(1, [W, C]), make(2, [N, C]), make(3, [C, S]), make(4, [C, E]))
     [c] = shared_node_crossings(ws)
     assert (c.way_a, c.way_b) == (1, 2)
+
+
+def test_ways_sharing_upstream_segment_are_not_crossing():
+    # 2本とも N から C に来て、C の先で分かれる。重ねて描かれた線で、交差ではない
+    ws = ways(make(1, [N, C, E]), make(2, [(5, 0, 0.002), N, C, S]))
+    assert node_flows(ws)[100] == (2, 2)
+    assert shared_node_crossings(ws) == []
+
+
+def test_ways_sharing_downstream_segment_are_not_crossing():
+    ws = ways(make(1, [W, C, S]), make(2, [N, C, S, (5, 0, -0.002)]))
+    assert shared_node_crossings(ws) == []
